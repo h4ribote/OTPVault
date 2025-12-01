@@ -9,6 +9,25 @@
         .progress-bar {
             transition: width 1s linear;
         }
+        /* トースト通知のアニメーション */
+        .toast-enter {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        .toast-enter-active {
+            transform: translateY(0);
+            opacity: 1;
+            transition: all 300ms ease-out;
+        }
+        .toast-exit {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast-exit-active {
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 300ms ease-in;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
@@ -77,6 +96,11 @@
         </div>
     </div>
 
+    <!-- トースト通知 -->
+    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded shadow-lg hidden z-50 transition-opacity duration-300">
+        Copied to clipboard!
+    </div>
+
     <script>
         const loginForm = document.getElementById('login-form');
         const loginContainer = document.getElementById('login-container');
@@ -87,6 +111,7 @@
         const addModal = document.getElementById('add-modal');
         const addForm = document.getElementById('add-form');
         const emptyState = document.getElementById('empty-state');
+        const toast = document.getElementById('toast');
 
         let masterPassword = '';
         let intervalId = null;
@@ -217,7 +242,8 @@
 
             otpList.innerHTML = '';
             items.forEach(item => {
-                const period = item.period || 30;
+                // クライアント側で残り時間を計算
+                const period = item.period || 30; // サーバーから受け取った間隔（なければ30秒）
                 const epoch = Math.floor(Date.now() / 1000);
                 const valid_seconds = period - (epoch % period);
 
@@ -228,6 +254,7 @@
 
                 const card = document.createElement('div');
                 card.className = 'bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow duration-200';
+                // OTP表示部分に onclick イベントとスタイルを追加
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-2">
                         <div>
@@ -236,7 +263,11 @@
                         </div>
                     </div>
                     <div class="flex justify-between items-end">
-                        <div class="text-3xl font-mono font-bold text-gray-800 tracking-wider">${formatOtp(item.otp)}</div>
+                        <div class="text-3xl font-mono font-bold text-gray-800 tracking-wider cursor-pointer hover:text-indigo-600 select-none active:scale-95 transition-transform" 
+                             onclick="copyToClipboard('${item.otp}')"
+                             title="Click to copy">
+                            ${item.otp}
+                        </div>
                         <div class="text-2xl font-bold text-gray-400 w-8 text-center">${valid_seconds}</div>
                     </div>
                     <div class="w-full bg-gray-200 h-1.5 mt-4 rounded-full overflow-hidden">
@@ -247,11 +278,6 @@
             });
         }
 
-        function formatOtp(otp) {
-            // 3桁ごとにスペースを入れる
-            return otp.replace(/(\d{3})(\d{3})/, '$1 $2');
-        }
-
         function escapeHtml(text) {
             if (!text) return "";
             return text
@@ -260,6 +286,47 @@
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
+        }
+
+        function copyToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast();
+                } else {
+                    console.error('Copy failed');
+                }
+            } catch (err) {
+                console.error('Copy error', err);
+            }
+
+            document.body.removeChild(textArea);
+        }
+
+        let toastTimeout;
+        function showToast() {
+            toast.classList.remove('hidden');
+            toast.classList.add('toast-enter-active');
+            
+            if (toastTimeout) {
+                clearTimeout(toastTimeout);
+            }
+
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('toast-enter-active');
+                toast.classList.add('hidden');
+            }, 2000);
         }
     </script>
 </body>
