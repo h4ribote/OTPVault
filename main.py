@@ -21,7 +21,7 @@ class OTPResponse(BaseModel):
     issuer: str
     name: str
     otp: str
-    valid_seconds: int
+    period: int
 
 class OTPCreateRequest(BaseModel):
     issuer: str
@@ -88,13 +88,12 @@ async def get_otps(x_password: str = Header(..., alias="X-Password")):
         try:
             totp = pyotp.TOTP(secret)
             current_otp = totp.now()
-            time_remaining = int(totp.interval - time.time() % totp.interval)
             
             response_data.append(OTPResponse(
                 issuer=acc.get("issuer", "Unknown"),
                 name=acc.get("name", "Unknown"),
                 otp=current_otp,
-                valid_seconds=time_remaining
+                period=totp.interval
             ))
         except Exception:
             continue

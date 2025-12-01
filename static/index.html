@@ -217,10 +217,14 @@
 
             otpList.innerHTML = '';
             items.forEach(item => {
-                const percentage = (item.valid_seconds / 30) * 100;
+                const period = item.period || 30;
+                const epoch = Math.floor(Date.now() / 1000);
+                const valid_seconds = period - (epoch % period);
+
+                const percentage = (valid_seconds / period) * 100;
                 let colorClass = 'bg-green-500';
-                if (item.valid_seconds < 5) colorClass = 'bg-red-500';
-                else if (item.valid_seconds < 10) colorClass = 'bg-yellow-500';
+                if (valid_seconds < 5) colorClass = 'bg-red-500';
+                else if (valid_seconds < 10) colorClass = 'bg-yellow-500';
 
                 const card = document.createElement('div');
                 card.className = 'bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow duration-200';
@@ -233,7 +237,7 @@
                     </div>
                     <div class="flex justify-between items-end">
                         <div class="text-3xl font-mono font-bold text-gray-800 tracking-wider">${formatOtp(item.otp)}</div>
-                        <div class="text-2xl font-bold text-gray-400 w-8 text-center">${item.valid_seconds}</div>
+                        <div class="text-2xl font-bold text-gray-400 w-8 text-center">${valid_seconds}</div>
                     </div>
                     <div class="w-full bg-gray-200 h-1.5 mt-4 rounded-full overflow-hidden">
                         <div class="h-full ${colorClass} progress-bar" style="width: ${percentage}%"></div>
