@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTPVault</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .progress-bar {
+            transition: width 1s linear;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Login form -->
+    <div id="login-container" class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">OTPVault Login</h1>
+        <form id="login-form" class="space-y-4">
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">Master Password</label>
+                <input type="password" id="password" required 
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <button type="submit" 
+                class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Unlock
+            </button>
+            <p id="error-message" class="text-red-500 text-sm hidden text-center"></p>
+        </form>
+    </div>
+
+    <div id="otp-container" class="hidden w-full max-w-2xl relative">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold text-gray-800">My Codes</h2>
+            <div class="space-x-2">
+                <button onclick="showAddModal()" class="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">Add</button>
+                <button id="logout-btn" class="text-sm text-red-600 hover:text-red-800">Lock</button>
+            </div>
+        </div>
+        
+        <div id="otp-list" class="grid gap-4 md:grid-cols-2">
+            <!-- OTP Cards -->
+        </div>
+        <div id="empty-state" class="hidden text-center text-gray-500 mt-10">
+            No accounts added yet. Click "Add" to get started.
+        </div>
+    </div>
+
+    <!-- 追加モーダル -->
+    <div id="add-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Add New Account</h3>
+                <form id="add-form" class="mt-4 text-left space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Issuer (Service Name)</label>
+                        <input type="text" id="new-issuer" required placeholder="e.g. Google"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Account Name</label>
+                        <input type="text" id="new-name" required placeholder="e.g. user@example.com"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Secret Key</label>
+                        <input type="text" id="new-secret" required placeholder="Base32 Secret"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" onclick="closeAddModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('login-form');
+        const loginContainer = document.getElementById('login-container');
+        const otpContainer = document.getElementById('otp-container');
+        const otpList = document.getElementById('otp-list');
+        const errorMessage = document.getElementById('error-message');
+        const logoutBtn = document.getElementById('logout-btn');
+        const addModal = document.getElementById('add-modal');
+        const addForm = document.getElementById('add-form');
+        const emptyState = document.getElementById('empty-state');
+
+        let masterPassword = '';
+        let intervalId = null;
+
+        // Login Logic
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const passwordInput = document.getElementById('password').value;
+            errorMessage.classList.add('hidden');
+            
+            // 初回検証
+            const success = await fetchOtp(passwordInput);
+            if (success) {
+                masterPassword = passwordInput;
+                showApp();
+                startPolling();
+            } else {
+                errorMessage.textContent = "パスワードが正しくありません。";
+                errorMessage.classList.remove('hidden');
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            masterPassword = '';
+            stopPolling();
+            hideApp();
+            document.getElementById('password').value = '';
+        });
+
+        // Add Modal Logic
+        function showAddModal() {
+            addModal.classList.remove('hidden');
+        }
+
+        function closeAddModal() {
+            addModal.classList.add('hidden');
+            addForm.reset();
+        }
+
+        addForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const issuer = document.getElementById('new-issuer').value;
+            const name = document.getElementById('new-name').value;
+            const secret = document.getElementById('new-secret').value;
+
+            try {
+                const response = await fetch('/api/otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Password': masterPassword
+                    },
+                    body: JSON.stringify({ issuer, name, secret })
+                });
+
+                if (response.ok) {
+                    closeAddModal();
+                    fetchOtp(masterPassword); // リスト更新
+                } else {
+                    const err = await response.json();
+                    alert("Error: " + (err.detail || "Failed to add OTP"));
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Failed to connect to server");
+            }
+        });
+
+        // App State Management
+        function showApp() {
+            loginContainer.classList.add('hidden');
+            otpContainer.classList.remove('hidden');
+        }
+
+        function hideApp() {
+            loginContainer.classList.remove('hidden');
+            otpContainer.classList.add('hidden');
+        }
+
+        function startPolling() {
+            intervalId = setInterval(() => {
+                fetchOtp(masterPassword);
+            }, 1000);
+        }
+
+        function stopPolling() {
+            if (intervalId) clearInterval(intervalId);
+        }
+
+        async function fetchOtp(password) {
+            try {
+                const response = await fetch('/api/otp', {
+                    headers: {
+                        'X-Password': password
+                    }
+                });
+
+                if (response.status === 401) {
+                    if (masterPassword) { 
+                        stopPolling();
+                        hideApp();
+                        alert("セッションが無効です。再ログインしてください。");
+                    }
+                    return false;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('API Error');
+                }
+
+                const data = await response.json();
+                renderOtps(data);
+                return true;
+
+            } catch (error) {
+                console.error(error);
+                return false;
+            }
+        }
+
+        function renderOtps(items) {
+            if (items.length === 0) {
+                otpList.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            otpList.innerHTML = '';
+            items.forEach(item => {
+                const percentage = (item.valid_seconds / 30) * 100;
+                let colorClass = 'bg-green-500';
+                if (item.valid_seconds < 5) colorClass = 'bg-red-500';
+                else if (item.valid_seconds < 10) colorClass = 'bg-yellow-500';
+
+                const card = document.createElement('div');
+                card.className = 'bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow duration-200';
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide">${escapeHtml(item.issuer)}</p>
+                            <p class="text-sm text-gray-600">${escapeHtml(item.name)}</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div class="text-3xl font-mono font-bold text-gray-800 tracking-wider">${formatOtp(item.otp)}</div>
+                        <div class="text-2xl font-bold text-gray-400 w-8 text-center">${item.valid_seconds}</div>
+                    </div>
+                    <div class="w-full bg-gray-200 h-1.5 mt-4 rounded-full overflow-hidden">
+                        <div class="h-full ${colorClass} progress-bar" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                otpList.appendChild(card);
+            });
+        }
+
+        function formatOtp(otp) {
+            // 3桁ごとにスペースを入れる
+            return otp.replace(/(\d{3})(\d{3})/, '$1 $2');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
