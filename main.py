@@ -165,4 +165,4 @@ def initialize_file_if_needed():
 
 if __name__ == "__main__":
     initialize_file_if_needed()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
