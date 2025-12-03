@@ -194,7 +194,7 @@
         function startPolling() {
             intervalId = setInterval(() => {
                 fetchOtp(masterPassword);
-            }, 1000);
+            }, 500);
         }
 
         function stopPolling() {
@@ -253,12 +253,12 @@
                 else if (valid_seconds < 10) colorClass = 'bg-yellow-500';
 
                 const card = document.createElement('div');
-                card.className = 'bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow duration-200';
+                card.className = 'bg-white p-6 rounded-lg shadow-lg transition-shadow duration-200';
                 // OTP表示部分に onclick イベントとスタイルを追加
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-2">
                         <div>
-                            <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide">${escapeHtml(item.issuer)}</p>
+                            <p class="text-xs text-gray-500 font-semibold tracking-wide">${escapeHtml(item.issuer)}</p>
                             <p class="text-sm text-gray-600">${escapeHtml(item.name)}</p>
                         </div>
                     </div>
