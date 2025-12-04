@@ -114,9 +114,9 @@ async def add_otp(otp_data: OTPCreateRequest, x_password: str = Header(..., alia
     # 既存データの読み込み
     accounts, salt = load_encrypted_data(x_password)
     
-    # Secretの簡単な検証（pyotpでインスタンス化できるか）
+    # Secretの簡単な検証
     try:
-        pyotp.TOTP(otp_data.secret)
+        pyotp.TOTP(otp_data.secret).now()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid Secret Key")
     
