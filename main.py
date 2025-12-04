@@ -3,6 +3,7 @@ import os
 import json
 import time
 import getpass
+import uuid
 from typing import List, Optional
 from fastapi import FastAPI, Header, HTTPException, Request, Body
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,7 @@ import pyotp
 app = FastAPI()
 
 class OTPResponse(BaseModel):
+    id: str
     issuer: str
     name: str
     otp: str
@@ -27,6 +29,9 @@ class OTPCreateRequest(BaseModel):
     issuer: str
     name: str
     secret: str
+
+class OTPDeleteRequest(BaseModel):
+    id: str
 
 def get_key(password: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
@@ -77,7 +82,7 @@ async def get_otps(x_password: str = Header(..., alias="X-Password")):
     ヘッダーのパスワードを使用してencrypted.binを復号化し、
     現在のOTP情報を返します。
     """
-    accounts, _ = load_encrypted_data(x_password)
+    accounts, salt = load_encrypted_data(x_password)
     
     response_data = []
     for acc in accounts:
@@ -90,6 +95,7 @@ async def get_otps(x_password: str = Header(..., alias="X-Password")):
             current_otp = totp.now()
             
             response_data.append(OTPResponse(
+                id=acc["id"],
                 issuer=acc.get("issuer", "Unknown"),
                 name=acc.get("name", "Unknown"),
                 otp=current_otp,
@@ -116,6 +122,7 @@ async def add_otp(otp_data: OTPCreateRequest, x_password: str = Header(..., alia
     
     # 新しいデータ形式
     new_entry = {
+        "id": str(uuid.uuid4()),
         "issuer": otp_data.issuer,
         "name": otp_data.name,
         "secret": otp_data.secret
@@ -127,6 +134,24 @@ async def add_otp(otp_data: OTPCreateRequest, x_password: str = Header(..., alia
     save_encrypted_data(accounts, x_password, salt)
     
     return {"message": "OTP added successfully"}
+
+@app.delete("/api/otp")
+async def delete_otp(otp_data: OTPDeleteRequest, x_password: str = Header(..., alias="X-Password")):
+    """
+    指定されたIDを持つOTP情報を削除します。
+    """
+    accounts, salt = load_encrypted_data(x_password)
+    
+    # IDが一致しないものだけを残す（削除処理）
+    original_count = len(accounts)
+    new_accounts = [acc for acc in accounts if acc.get("id") != otp_data.id]
+    
+    if len(new_accounts) == original_count:
+        raise HTTPException(status_code=404, detail="OTP not found")
+        
+    save_encrypted_data(new_accounts, x_password, salt)
+    
+    return {"message": "OTP deleted successfully"}
 
 # 静的ファイルのmount
 if not os.path.exists("static"):
